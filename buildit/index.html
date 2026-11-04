@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SketchPlus</title>
+    <!-- Estilos principales de la aplicación -->
+    <link rel="stylesheet" href="./css/estilos.css">
+    <!-- FontAwesome para iconos modernos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <!-- Three.js y OrbitControls desde CDN con versión fija (r128) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <!-- Contenedor principal de la aplicación -->
+    <div id="app-container">
+        
+        <!-- Barra superior / Header -->
+        <header id="app-header">
+            <div class="brand">
+                <i class="fa-solid fa-cube"></i>
+                <h1>SketchPlus</h1>
+            </div>
+            
+            <!-- Controles globales: pisos, guardado, exportación e historial -->
+            <div class="global-controls">
+                <div class="level-selector">
+                    <label for="nivel-select"><i class="fa-solid fa-layer-group"></i> Piso:</label>
+                    <select id="nivel-select" aria-label="Seleccionar nivel de construcción">
+                        <option value="0">Planta Baja</option>
+                        <option value="1">Piso 1</option>
+                    </select>
+                    <button id="btn-agregar-piso" title="Agregar piso"><i class="fa-solid fa-plus"></i></button>
+                    <button id="btn-quitar-piso" title="Quitar piso" disabled><i class="fa-solid fa-minus"></i></button>
+                </div>
+                
+                <div class="action-buttons">
+                    <button id="btn-undo" title="Deshacer (Ctrl+Z)" disabled><i class="fa-solid fa-rotate-left"></i></button>
+                    <button id="btn-redo" title="Rehacer (Ctrl+Y)" disabled><i class="fa-solid fa-rotate-right"></i></button>
+                    <button id="btn-guardar-proyecto" title="Guardar proyecto en este dispositivo"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+                    <label class="formato-exportacion-plano">
+                        <span class="sr-only">Formato de exportación</span>
+                        <select id="formato-exportacion-plano" aria-label="Formato de exportación">
+                            <option value="png">PNG</option>
+                            <option value="dxf">DXF</option>
+                            <option value="dwg">DWG (requiere ODA local)</option>
+                        </select>
+                    </label>
+                    <button id="btn-exportar-plano" title="Exportar el plano en el formato seleccionado"><i class="fa-solid fa-file-export"></i> Exportar</button>
+                    <button id="btn-importar-plano-guia" title="Cargar una imagen de referencia para dibujar encima"><i class="fa-solid fa-map"></i> Plano guía</button>
+                    <button id="btn-quitar-plano-guia" title="Quitar plano guía" hidden><i class="fa-solid fa-xmark"></i></button>
+                    <input id="input-plano-guia" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                    <button id="btn-ver-ejemplos" class="btn-secondary" title="Cargar un ejemplo de casa"><i class="fa-solid fa-house-chimney"></i> Cargar</button>
+                    <button id="btn-theme-toggle" title="Cambiar modo claro/oscuro"><i class="fa-solid fa-moon"></i></button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Cuerpo principal con 3 zonas -->
+        <div id="main-content">
+            
+            <!-- ZONA 1: Barra de herramientas lateral izquierda -->
+            <aside id="toolbar" aria-label="Herramientas de dibujo">
+                <div class="tool-group">
+                    <button class="tool-btn active" data-tool="seleccionar" title="Seleccionar o mover un elemento">
+                        <i class="fa-solid fa-arrow-pointer"></i>
+                        <span>Seleccionar</span>
+                    </button>
+                    <button class="tool-btn" data-tool="pincel" title="Dibujar con el material seleccionado">
+                        <i class="fa-solid fa-paintbrush"></i>
+                        <span>Pincel</span>
+                    </button>
+                    <button class="tool-btn" data-tool="muro" title="Dibujar muro">
+                        <i class="fa-solid fa-wall"></i>
+                        <span>Muro</span>
+                    </button>
+                    <button class="tool-btn" data-tool="piso" title="Dibujar piso o losa">
+                        <i class="fa-solid fa-chess-board"></i>
+                        <span>Piso</span>
+                    </button>
+                    <button class="tool-btn" data-tool="abertura" title="Agregar puerta, ventana o portón">
+                        <i class="fa-solid fa-door-open"></i>
+                        <span>Abertura</span>
+                    </button>
+                    <button class="tool-btn" data-tool="medir" title="Medir distancia">
+                        <i class="fa-solid fa-ruler"></i>
+                        <span>Medir</span>
+                    </button>
+                    <button class="tool-btn" data-tool="borrar" title="Borrar elemento">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Borrar</span>
+                    </button>
+                </div>
+
+                <label class="brush-shape-control" id="brush-shape-control" for="forma-dibujo" hidden>
+                    <span>Forma</span>
+                    <select id="forma-dibujo">
+                        <option value="linea">Línea</option>
+                        <option value="poligono">Libre</option>
+                        <option value="rectangulo">Rectángulo</option>
+                        <option value="circulo">Círculo</option>
+                    </select>
+                </label>
+
+                <div class="snap-control">
+                    <label class="switch-label">
+                        <input type="checkbox" id="snap-toggle" checked>
+                        <span>Snap 10cm</span>
+                    </label>
+                </div>
+            </aside>
+
+            <!-- ZONA 2: Visor 3D (Centro) -->
+            <main id="viewport-container">
+                <!-- Controles de cámara / Vistas rápidas -->
+                <div class="view-controls">
+                    <button class="view-btn" data-view="3d" title="Vista 3D Libre">3D</button>
+                    <button class="view-btn" data-view="2d" title="Plano 2D para dibujar">2D</button>
+                    <button class="view-btn" data-view="planta" title="Vista en Planta">Planta</button>
+                    <button class="view-btn" data-view="frontal" title="Vista Frontal">Frontal</button>
+                    <button class="view-btn" data-view="lateral" title="Vista Lateral">Lateral</button>
+                    <button class="view-btn annotation-toggle" id="toggle-anotaciones" type="button" aria-pressed="false" title="Mostrar u ocultar medidas y ángulos">
+                        <i class="fa-solid fa-ruler-combined"></i> Medidas
+                    </button>
+                </div>
+
+                <div id="tipos-abertura-controles" class="tipos-abertura-controles" hidden>
+                    <label for="tipo-abertura">Abertura</label>
+                    <select id="tipo-abertura">
+                        <option value="puerta">Puerta abatible · 0,9 × 2,1 m</option>
+                        <option value="puerta-doble">Puerta doble · 1,5 × 2,1 m</option>
+                        <option value="puerta-corredera">Puerta corredera · 1,8 × 2,1 m</option>
+                        <option value="ventana-fija">Ventana fija · 1,2 × 1 m</option>
+                        <option value="ventana-corredera">Ventana corredera · 1,5 × 1,2 m</option>
+                        <option value="porton-garaje">Portón de garaje · 2,8 × 2,4 m</option>
+                    </select>
+                </div>
+
+                <div id="plano-guia-controles" class="plano-guia-controles" hidden>
+                    <label>
+                        <span>Ancho guía</span>
+                        <input id="plano-guia-ancho" type="range" min="2" max="30" step="0.5" value="12">
+                        <output id="plano-guia-ancho-valor" for="plano-guia-ancho">12 m</output>
+                    </label>
+                    <label>
+                        <span>Opacidad</span>
+                        <input id="plano-guia-opacidad" type="range" min="10" max="100" step="5" value="55">
+                        <output id="plano-guia-opacidad-valor" for="plano-guia-opacidad">55%</output>
+                    </label>
+                </div>
+
+                <!-- Canvas de Three.js -->
+                <div id="canvas-target"></div>
+                <svg id="simbolos-aberturas-plano" aria-hidden="true"></svg>
+
+                <!-- Barra de estado y ayuda contextual -->
+                <div id="status-bar">
+                    <span id="context-help"><i class="fa-solid fa-circle-info"></i> Selecciona una herramienta para comenzar a dibujar.</span>
+                    <span id="coords-display">X: 0.00m | Z: 0.00m</span>
+                </div>
+            </main>
+
+            <!-- ZONA 3: Panel derecho con pestañas -->
+            <aside id="right-panel">
+                <!-- Cabecera de pestañas -->
+                <nav class="panel-tabs" role="tablist">
+                    <button class="tab-btn active" data-tab="propiedades" role="tab">
+                        <i class="fa-solid fa-sliders"></i> Propiedades
+                    </button>
+                    <button class="tab-btn" data-tab="catalogo" role="tab">
+                        <i class="fa-solid fa-store"></i> Catálogo
+                    </button>
+                    <button class="tab-btn" data-tab="presupuesto" role="tab">
+                        <i class="fa-solid fa-calculator"></i> Presupuesto
+                    </button>
+                </nav>
+
+                <!-- Contenido de las pestañas -->
+                <div class="panel-body">
+                    
+                    <!-- Pestaña 1: Propiedades -->
+                    <div id="tab-propiedades" class="tab-content active" role="tabpanel">
+                        <h3>Propiedades del Elemento</h3>
+                        <div id="propiedades-vacio" class="empty-state">
+                            <i class="fa-solid fa-mouse-pointer"></i>
+                            <p>Selecciona un objeto en 2D o 3D para moverlo, editar sus medidas y material, duplicarlo o eliminarlo.</p>
+                        </div>
+                        <div id="propiedades-form" class="hidden">
+                            <!-- Los campos de edición se cargarán dinámicamente vía JS -->
+                        </div>
+                    </div>
+
+                    <!-- Pestaña 2: Catálogo de Materiales -->
+                    <div id="tab-catalogo" class="tab-content" role="tabpanel">
+                        <h3>Catálogo de Materiales</h3>
+                        <div class="catalogo-filters">
+                            <div class="catalogo-busqueda">
+                                <input type="search" id="catalogo-buscar" placeholder="Buscar material..." aria-label="Buscar material" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="catalogo-sugerencias">
+                                <div id="catalogo-sugerencias" class="catalogo-sugerencias" role="listbox" aria-label="Sugerencias de materiales" hidden></div>
+                            </div>
+                            <select id="catalogo-categoria" aria-label="Filtrar por categoría">
+                                <option value="">Todas las categorías</option>
+                            </select>
+                        </div>
+                        <div id="catalogo-lista" class="product-grid">
+                            <!-- Tarjetas de materiales inyectadas por JS -->
+                        </div>
+                    </div>
+
+                    <!-- Pestaña 3: Presupuesto y Costos -->
+                    <div id="tab-presupuesto" class="tab-content" role="tabpanel">
+                        <h3>Presupuesto en Tiempo Real</h3>
+                        <label class="presupuesto-origen">
+                            <span>Origen del cálculo</span>
+                            <select id="presupuesto-origen-calculo">
+                                <option value="plano">Materiales del plano</option>
+                                <option value="manual">Solo materiales ingresados</option>
+                            </select>
+                        </label>
+                        <section id="presupuesto-manual" class="presupuesto-manual" hidden>
+                            <h4>Ingresar materiales manualmente</h4>
+                            <p>Este cálculo suma todas las filas agregadas aquí y no incluye materiales del plano. Ciudad de referencia: Bogotá D.C.</p>
+                            <div class="fuentes-precios-colombia">
+                                <strong>Fuentes de referencia</strong>
+                                <span>Registra el precio de una cotización verificable. SECOP refleja contratos públicos y DANE publica índices de costos, no precios unitarios de ferretería.</span>
+                                <a href="https://www.colombiacompra.gov.co/secop/secop-ii" target="_blank" rel="noopener noreferrer">Consultar SECOP II</a>
+                                <a href="https://www.dane.gov.co/index.php/estadisticas-por-tema/construccion/indice-de-costos-de-la-construccion-de-edificaciones-icoced" target="_blank" rel="noopener noreferrer">Consultar ICOCED del DANE</a>
+                            </div>
+                            <form id="form-material-manual" class="form-material-manual">
+                                <label><span>N.º</span><input name="numero" required maxlength="20" placeholder="1"></label>
+                                <label><span>Nombre / búsqueda</span><input name="nombre" list="catalogo-materiales-manuales" required maxlength="100" placeholder="Ej. Cemento gris"></label>
+                                <datalist id="catalogo-materiales-manuales"></datalist>
+                                <label><span>Referencia del producto</span><input name="referencia" required maxlength="80" placeholder="Marca / SKU / REF"></label>
+                                <label><span>Cantidad</span><input name="cantidad" type="number" min="0.001" step="any" required placeholder="0"></label>
+                                <label><span>Unidad</span><input name="unidad" required maxlength="20" placeholder="bulto, m²..."></label>
+                                <label><span>Precio unitario (COP)</span><input name="precioUnitario" type="number" min="0.01" step="any" required placeholder="0"></label>
+                                <label><span>Fuente del precio</span>
+                                    <select name="tipoFuentePrecio" required>
+                                        <option value="Cotización de proveedor">Cotización de proveedor</option>
+                                        <option value="SECOP II">SECOP II · contrato público</option>
+                                        <option value="Lista de precios Bogotá">Lista de precios Bogotá</option>
+                                        <option value="Catálogo interno">Catálogo interno · verificar</option>
+                                    </select>
+                                </label>
+                                <label><span>Enlace / número de cotización o contrato</span><input name="fuentePrecio" required maxlength="300" placeholder="URL, proveedor y número de cotización"></label>
+                                <label><span>Fecha del precio</span><input name="fechaPrecio" type="date" required></label>
+                                <small id="manual-material-sugerencia" class="manual-material-sugerencia" aria-live="polite"></small>
+                                <button type="submit" class="btn-primary">Agregar material</button>
+                            </form>
+                            <div class="tabla-material-manual-wrap">
+                                <table class="tabla-material-manual">
+                                    <thead><tr><th>N.º</th><th>Material / referencia</th><th>Cantidad</th><th>Unidad</th><th>Precio unit.</th><th>Fuente / fecha</th><th>Total</th><th></th></tr></thead>
+                                    <tbody id="lista-materiales-manuales"></tbody>
+                                </table>
+                            </div>
+                        </section>
+                        <div class="presupuesto-summary">
+                            <div class="total-card">
+                                <div class="total-card-heading">
+                                    <span><i class="fa-solid fa-chart-pie"></i> Costo total estimado</span>
+                                    <span id="presupuesto-modo" class="presupuesto-modo">Actual</span>
+                                </div>
+                                <h2 id="presupuesto-total" aria-live="polite">$ 0 COP</h2>
+                                <div class="total-card-footer">
+                                    <span id="presupuesto-elementos">0 elementos</span>
+                                    <small>Valores de referencia · confirma con tu proveedor</small>
+                                </div>
+                                <button type="button" id="presupuesto-calculo-directo" class="presupuesto-calculo-directo" aria-pressed="true">
+                                    <i class="fa-solid fa-calculator" aria-hidden="true"></i>
+                                    <span>Cálculo directo</span>
+                                    <span class="presupuesto-calculo-estado">Activado</span>
+                                </button>
+                                <small id="presupuesto-nota-mano-obra" class="presupuesto-nota-mano-obra">
+                                    Activo: solo materiales calculados según las cantidades del plano.
+                                </small>
+                            </div>
+                            <div class="presupuesto-alternativas">
+                                <button id="btn-alt-barata" class="btn-alt"><i class="fa-solid fa-arrow-trend-down"></i> Ver Alternativa Barata</button>
+                                <button id="btn-alt-premium" class="btn-alt"><i class="fa-solid fa-arrow-trend-up"></i> Ver Alternativa Premium</button>
+                            </div>
+                        </div>
+                        <section id="alternativa-propuesta" class="alternativa-propuesta" hidden aria-live="polite">
+                            <div class="alternativa-propuesta-heading">
+                                <div>
+                                    <h4 id="alternativa-propuesta-titulo">Propuesta de materiales</h4>
+                                    <p id="alternativa-propuesta-resumen"></p>
+                                </div>
+                                <button type="button" id="cerrar-alternativa-propuesta" aria-label="Cerrar propuesta">×</button>
+                            </div>
+                            <p class="alternativa-propuesta-nota">Se conservarán todos los elementos. Solo se proponen productos de la misma categoría que no reducen la resistencia indicada; se recalcula la cantidad y el costo completo de cada sustitución. Los precios del catálogo son orientativos y deben contrastarse con cotizaciones vigentes de Bogotá.</p>
+                            <small class="alternativa-propuesta-advertencia">La resistencia proviene de las fichas del catálogo SketchPlus y no reemplaza la ficha técnica del fabricante ni el diseño de un profesional estructural.</small>
+                            <div id="alternativa-propuesta-lista"></div>
+                            <div class="alternativa-propuesta-total">
+                                <span>Total con cambios seleccionados</span>
+                                <strong id="alternativa-propuesta-total">$ 0 COP</strong>
+                            </div>
+                            <button type="button" id="aplicar-alternativa-propuesta" class="btn-primary">Aplicar materiales seleccionados</button>
+                        </section>
+                        <div id="presupuesto-desglose">
+                            <!-- Desglose por categorías y gráficos -->
+                        </div>
+                        <div class="presupuesto-actions">
+                            <button id="btn-exportar-csv" class="btn-secondary"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
+                            <button id="btn-imprimir-pdf" class="btn-primary"><i class="fa-solid fa-print"></i> Imprimir / PDF</button>
+                        </div>
+                    </div>
+
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+    <dialog id="dialog-ejemplos-casas" class="dialog-ejemplos">
+        <div class="dialog-ejemplos-encabezado">
+            <div>
+                <span class="dialog-eyebrow">Ideas para empezar</span>
+                <h2>Ejemplos de casas</h2>
+                <p>Abre un diseño para ver su plano 2D y el presupuesto estimado.</p>
+            </div>
+            <button type="button" class="dialog-cerrar" data-cerrar-ejemplos aria-label="Cerrar ejemplos">&times;</button>
+        </div>
+        <div class="ejemplos-casas-lista">
+            <article class="ejemplo-casa-card">
+                <div class="ejemplo-casa-icono"><i class="fa-solid fa-house"></i></div>
+                <div class="ejemplo-casa-info">
+                    <h3>Casa compacta</h3>
+                    <p>6 × 8 m · distribución compacta · 1 piso</p>
+                </div>
+                <button type="button" class="btn-primary" data-cargar-casa="compacta">Ver plano y presupuesto</button>
+            </article>
+            <article class="ejemplo-casa-card">
+                <div class="ejemplo-casa-icono"><i class="fa-solid fa-house-chimney"></i></div>
+                <div class="ejemplo-casa-info">
+                    <h3>Casa familiar</h3>
+                    <p>8 × 10 m · distribución familiar · 1 piso</p>
+                </div>
+                <button type="button" class="btn-primary" data-cargar-casa="familiar">Ver plano y presupuesto</button>
+            </article>
+            <article class="ejemplo-casa-card">
+                <div class="ejemplo-casa-icono"><i class="fa-solid fa-city"></i></div>
+                <div class="ejemplo-casa-info">
+                    <h3>Casa amplia</h3>
+                    <p>10 × 12 m · distribución amplia · 1 piso</p>
+                </div>
+                <button type="button" class="btn-primary" data-cargar-casa="amplia">Ver plano y presupuesto</button>
+            </article>
+        </div>
+        <small class="dialog-ejemplos-nota">Al abrir un ejemplo, se reemplazará el plano actual. Podrás deshacer el cambio.</small>
+    </dialog>
+
+    <!-- Script de arranque principal -->
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>
